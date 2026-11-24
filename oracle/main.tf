@@ -15,8 +15,9 @@ provider "oci" {
 locals {
   shape = "VM.Standard.A1.Flex"
 
-  # Ports open to admin_cidr only.
-  admin_ports = [22, 8443]
+  # Ports open to admin_cidr only, for every CIDR listed.
+  admin_cidrs = distinct([for c in split(",", var.admin_cidr) : trimspace(c)])
+  admin_rules = [for pair in setproduct(local.admin_cidrs, [22, 8443]) : { cidr = pair[0], port = pair[1] }]
 
   # Ports open to client_cidr.
   client_ports = concat([8089], var.open_enrolment_port ? [8446] : [])
@@ -95,14 +96,14 @@ resource "oci_core_security_list" "tak" {
   }
 
   dynamic "ingress_security_rules" {
-    for_each = local.admin_ports
+    for_each = local.admin_rules
     content {
       protocol    = "6" # TCP
-      source      = var.admin_cidr
-      description = "Admin access on ${ingress_security_rules.value}"
+      source      = ingress_security_rules.value.cidr
+      description = "Admin access on ${ingress_security_rules.value.port}"
       tcp_options {
-        min = ingress_security_rules.value
-        max = ingress_security_rules.value
+        min = ingress_security_rules.value.port
+        max = ingress_security_rules.value.port
       }
     }
   }

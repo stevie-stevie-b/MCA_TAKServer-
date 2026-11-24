@@ -23,11 +23,14 @@ variable "ssh_public_key" {
 
 variable "admin_cidr" {
   type        = string
-  description = "Who may reach SSH (22) and the admin web UI (8443). Use your own public IP with /32, e.g. 203.0.113.10/32."
+  description = "Who may reach SSH (22) and the admin web UI (8443). One or more CIDRs, comma-separated, e.g. 203.0.113.10/32 or 203.0.113.10/32,198.51.100.7/32."
 
   validation {
-    condition     = can(cidrhost(var.admin_cidr, 0)) && var.admin_cidr != "0.0.0.0/0"
-    error_message = "admin_cidr must be a valid CIDR and must not be 0.0.0.0/0."
+    condition = alltrue([
+      for c in split(",", var.admin_cidr) :
+      can(cidrhost(trimspace(c), 0)) && trimspace(c) != "0.0.0.0/0"
+    ])
+    error_message = "admin_cidr must be one or more valid CIDRs (comma-separated), and must not include 0.0.0.0/0."
   }
 }
 

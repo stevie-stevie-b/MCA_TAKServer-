@@ -51,6 +51,28 @@ Deploys the official TAK Server (Docker release from tak.gov) onto **Oracle Clou
 
 ## Deploy
 
+### Quickest: from Oracle Cloud Shell
+
+1. Do "Before you start" items 1–2 and step 2 below (upload the TAK zip and make a pre-authenticated request).
+2. Oracle console → **Cloud Shell** (`>_` icon, top right) → gear menu → **Upload** → `tak-oracle-stack.zip` (the `oracle` folder zipped).
+3. In Cloud Shell:
+
+   ```bash
+   unzip -o tak-oracle-stack.zip -d tak-stack && bash tak-stack/cloudshell-deploy.sh
+   ```
+
+The script:
+
+- creates a `tak` compartment and an SSH key,
+- asks for your IP and the pre-authenticated request link,
+- runs the plan, then asks before applying,
+- waits for TAK to finish installing,
+- leaves `tak-admin.p12` in Cloud Shell for you to download.
+
+If it fails with "Out of host capacity", run the second command again later. It picks up where it left off.
+
+### Manual: Resource Manager console
+
 ### 1. Before you start
 
 1. **Oracle Cloud account** with Sydney as home region. Upgrade to Pay As You Go and set a budget alert (see above).
