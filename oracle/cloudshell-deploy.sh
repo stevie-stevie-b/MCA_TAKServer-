@@ -69,11 +69,13 @@ read -rsp "Paste the pre-authenticated request URL for the TAK zip (hidden; Ente
 [ -z "$PAR" ] || [[ "$PAR" == https://* ]] || die "That URL should start with https://"
 
 TF_SSH_KEY=$(cat "$KEY.pub")
-export TF_SSH_KEY TF_ADMIN_CIDR="$ADMIN_CIDR" TF_PAR="$PAR"
+export TF_TENANCY="$TENANCY" TF_COMP="$COMP" TF_SSH_KEY TF_ADMIN_CIDR="$ADMIN_CIDR" TF_PAR="$PAR"
 python3 - > "$WORK/vars.json" <<'EOF'
 import json, os
 v = {
   "region": "ap-sydney-1",
+  "tenancy_ocid": os.environ["TF_TENANCY"],
+  "compartment_ocid": os.environ["TF_COMP"],
   "ssh_public_key": os.environ["TF_SSH_KEY"],
   "admin_cidr": os.environ["TF_ADMIN_CIDR"],
   "tak_zip_url": os.environ["TF_PAR"],
