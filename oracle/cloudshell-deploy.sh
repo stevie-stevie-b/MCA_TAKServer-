@@ -8,7 +8,14 @@
 #
 # Optional overrides: CERT_STATE, CERT_CITY, CERT_ORG, CERT_ORG_UNIT, SERVER_HOSTNAME,
 #                     COMPARTMENT_NAME (default tak), STACK_NAME (default tak-server)
+#                     OCPUS / MEMORY_GB (default 4 / 24; 2 / 12 is often easier to get)
+#                     RETRIES (default 1) and RETRY_MINUTES (default 5): keep retrying
+#                     the build while Oracle reports "Out of host capacity"
 set -euo pipefail
+OCPUS=${OCPUS:-4}
+MEMORY_GB=${MEMORY_GB:-24}
+RETRIES=${RETRIES:-1}
+RETRY_MINUTES=${RETRY_MINUTES:-5}
 
 REGION=ap-sydney-1
 COMPARTMENT_NAME=${COMPARTMENT_NAME:-tak}
@@ -66,7 +73,13 @@ ADMIN_CIDR="$MY_IP/32"
 [ "$MY_IP" = "$SHELL_IP" ] || ADMIN_CIDR="$ADMIN_CIDR,$SHELL_IP/32"
 
 read -rsp "Paste the pre-authenticated request URL for the TAK zip (hidden; Enter to skip): " PAR; echo
+PAR=$(echo "$PAR" | tr -d '[:space:]')
 [ -z "$PAR" ] || [[ "$PAR" == https://* ]] || die "That URL should start with https://"
+if [ -n "$PAR" ]; then
+  echo "Download link received (${#PAR} characters, ends ...${PAR: -24})."
+else
+  echo "No download link given: the server will build, but you'll copy the TAK zip up by hand (README step 5)."
+fi
 
 TF_SSH_KEY=$(cat "$KEY.pub")
 export TF_TENANCY="$TENANCY" TF_COMP="$COMP" TF_SSH_KEY TF_ADMIN_CIDR="$ADMIN_CIDR" TF_PAR="$PAR"
@@ -84,11 +97,15 @@ v = {
   "cert_city": os.environ.get("CERT_CITY", "Newcastle"),
   "cert_org": os.environ.get("CERT_ORG", "TAK"),
   "cert_org_unit": os.environ.get("CERT_ORG_UNIT", "TAK"),
+  "ocpus": os.environ.get("OCPUS", "4"),
+  "memory_gb": os.environ.get("MEMORY_GB", "24"),
 }
 print(json.dumps(v))
 EOF
 echo "Admin access (SSH + 8443) from: $ADMIN_CIDR"
 echo "Certificates: ${CERT_STATE:-NSW} / ${CERT_CITY:-Newcastle} / ${CERT_ORG:-TAK}"
+echo "Server size: $OCPUS OCPU, $MEMORY_GB GB RAM"
+export OCPUS MEMORY_GB
 
 # --- Stack -------------------------------------------------------------------
 say "Resource Manager stack '$STACK_NAME'"
@@ -122,18 +139,26 @@ read -rp "Build it now? [y/N] " GO
 
 # --- Apply -------------------------------------------------------------------
 say "Apply (builds the network and server; about 2-5 minutes)"
-APPLY=$(oci resource-manager job create-apply-job "${R[@]}" --stack-id "$STACK" --execution-plan-strategy AUTO_APPROVED \
-          --display-name "apply-$(date +%Y%m%d-%H%M)" \
-          --wait-for-state SUCCEEDED --wait-for-state FAILED --max-wait-seconds 3600 --query 'data.id' --raw-output)
-STATE=$(oci resource-manager job get "${R[@]}" --job-id "$APPLY" --query 'data."lifecycle-state"' --raw-output)
-if [ "$STATE" != "SUCCEEDED" ]; then
+attempt=1
+while :; do
+  APPLY=$(oci resource-manager job create-apply-job "${R[@]}" --stack-id "$STACK" --execution-plan-strategy AUTO_APPROVED \
+            --display-name "apply-$(date +%Y%m%d-%H%M)" \
+            --wait-for-state SUCCEEDED --wait-for-state FAILED --max-wait-seconds 3600 --query 'data.id' --raw-output)
+  STATE=$(oci resource-manager job get "${R[@]}" --job-id "$APPLY" --query 'data."lifecycle-state"' --raw-output)
+  [ "$STATE" = "SUCCEEDED" ] && break
   LOGS=$(job_logs "$APPLY")
   if echo "$LOGS" | grep -qi 'out of host capacity'; then
-    die "Oracle has no free ARM capacity in Sydney right now. Run this script again later (it picks up where it left off)."
+    if [ "$attempt" -lt "$RETRIES" ]; then
+      echo "$(date '+%H:%M') attempt $attempt/$RETRIES: no free ARM capacity in Sydney. Trying again in $RETRY_MINUTES minutes..."
+      attempt=$((attempt + 1))
+      sleep $((RETRY_MINUTES * 60))
+      continue
+    fi
+    die "Oracle has no free ARM capacity in Sydney right now (tried $attempt time(s)). Run again later, e.g. RETRIES=12 bash $0"
   fi
   echo "$LOGS" | tail -n 40
   die "Apply $STATE. Copy the lines above to Claude."
-fi
+done
 
 INST=$(oci compute instance list "${R[@]}" --compartment-id "$COMP" --display-name "$INSTANCE_NAME" \
          --lifecycle-state RUNNING --query 'data[0].id' --raw-output)
