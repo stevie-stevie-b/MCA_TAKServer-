@@ -9,13 +9,13 @@
 # Optional overrides: CERT_STATE, CERT_CITY, CERT_ORG, CERT_ORG_UNIT, SERVER_HOSTNAME,
 #                     COMPARTMENT_NAME (default tak), STACK_NAME (default tak-server)
 #                     OCPUS / MEMORY_GB (default 4 / 24; 2 / 12 is often easier to get)
-#                     RETRIES (default 1) and RETRY_MINUTES (default 5): keep retrying
+#                     RETRIES (default 1) and RETRY_MINUTES (default 15): keep retrying
 #                     the build while Oracle reports "Out of host capacity"
 set -euo pipefail
 OCPUS=${OCPUS:-4}
 MEMORY_GB=${MEMORY_GB:-24}
 RETRIES=${RETRIES:-1}
-RETRY_MINUTES=${RETRY_MINUTES:-5}
+RETRY_MINUTES=${RETRY_MINUTES:-15}
 
 REGION=ap-sydney-1
 COMPARTMENT_NAME=${COMPARTMENT_NAME:-tak}
@@ -141,9 +141,17 @@ read -rp "Build it now? [y/N] " GO
 say "Apply (builds the network and server; about 2-5 minutes)"
 attempt=1
 while :; do
-  APPLY=$(oci resource-manager job create-apply-job "${R[@]}" --stack-id "$STACK" --execution-plan-strategy AUTO_APPROVED \
+  if ! APPLY=$(oci resource-manager job create-apply-job "${R[@]}" --stack-id "$STACK" --execution-plan-strategy AUTO_APPROVED \
             --display-name "apply-$(date +%Y%m%d-%H%M)" \
-            --wait-for-state SUCCEEDED --wait-for-state FAILED --max-wait-seconds 3600 --query 'data.id' --raw-output)
+            --wait-for-state SUCCEEDED --wait-for-state FAILED --max-wait-seconds 3600 --query 'data.id' --raw-output 2>"$WORK/err"); then
+    if grep -qE 'TooManyRequests|"status": 429' "$WORK/err"; then
+      echo "$(date '+%H:%M') Oracle rate limit hit; waiting 20 minutes before trying again (doesn't count as an attempt)..."
+      sleep 1200
+      continue
+    fi
+    cat "$WORK/err"
+    die "Couldn't start the build job. Copy the lines above to Claude."
+  fi
   STATE=$(oci resource-manager job get "${R[@]}" --job-id "$APPLY" --query 'data."lifecycle-state"' --raw-output)
   [ "$STATE" = "SUCCEEDED" ] && break
   LOGS=$(job_logs "$APPLY")
