@@ -1,0 +1,38 @@
+#cloud-config
+# Rendered by Terraform. Installs Docker, opens the host firewall and runs the TAK setup.
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - unzip
+  - zip
+  - curl
+  - openssl
+
+write_files:
+  - path: /etc/tak-deploy.env
+    permissions: "0600"
+    owner: root:root
+    encoding: b64
+    content: ${setup_env_b64}
+  - path: /opt/tak-deploy/tak-setup.sh
+    permissions: "0750"
+    owner: root:root
+    encoding: b64
+    content: ${setup_script_b64}
+  - path: /opt/tak-deploy/tak-add-user.sh
+    permissions: "0750"
+    owner: root:root
+    encoding: b64
+    content: ${add_user_b64}
+  - path: /opt/tak-deploy/open-host-firewall.sh
+    permissions: "0750"
+    owner: root:root
+    encoding: b64
+    content: ${open_ports_b64}
+
+runcmd:
+  - [bash, /opt/tak-deploy/open-host-firewall.sh]
+  - [systemctl, enable, --now, docker]
+  - [bash, -c, "/opt/tak-deploy/tak-setup.sh 2>&1 | tee -a /var/log/tak-setup.log"]
