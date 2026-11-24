@@ -64,6 +64,10 @@ if ! ls -d "$BASE"/takserver-docker-* >/dev/null 2>&1; then
   unzip -q -o "$ZIP" -d "$BASE"
 fi
 RELEASE_DIR=$(ls -d "$BASE"/takserver-docker-* | head -n1)
+case "$(basename "$RELEASE_DIR")" in
+  takserver-docker-hardened-*)
+    die "This is the hardened (Iron Bank) release. It needs DoD registry1.dso.mil images and builds for x86 only. Use the standard takserver-docker-X.Y-RELEASE-NN.zip from tak.gov instead: delete $ZIP and $RELEASE_DIR, copy the standard zip to $ZIP and re-run." ;;
+esac
 [ -d "$RELEASE_DIR/tak" ] || die "Unexpected zip layout: no tak/ folder in $RELEASE_DIR. Is this the Docker release?"
 [ -f "$RELEASE_DIR/docker/Dockerfile.takserver" ] || die "No docker/Dockerfile.takserver in $RELEASE_DIR. Is this the Docker release?"
 TAK_DIR="$RELEASE_DIR/tak"
