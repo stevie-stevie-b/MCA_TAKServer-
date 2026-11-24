@@ -2,7 +2,22 @@
 
 Deploys the official TAK Server (Docker release from tak.gov) onto **Oracle Cloud's Always Free tier in Sydney** using an Oracle Resource Manager stack (Terraform). Adapted from Empyrean Defense's AWS CloudFormation guide, [TAK Server on AWS: Zero to Operational](https://empyreandefense.com/insights/tak-server-aws-zero-to-operational/).
 
-> **Status: untested.** Nothing here has been run against a real Oracle account or a real TAK release yet. The shell scripts pass `shellcheck`, but the Terraform has **not** been through `terraform validate`. Expect to fix small things on the first deploy.
+> **Status (24/11/2026):** the setup and add-user scripts have been run end to end against **takserver-docker-5.7-RELEASE-52** on an x86 Ubuntu test machine with Docker:
+>
+> - The certificates, database and server came up.
+> - The admin UI accepted the admin certificate and rejected connections without one.
+> - Two test phones connected on 8089 and exchanged positions.
+> - Users and data survived a restart and a full container rebuild.
+>
+> **Not yet tested:**
+> - The Terraform stack. It hasn't been through `terraform validate`.
+> - cloud-init and the Oracle host-firewall script.
+> - Public-IP auto-detection.
+> - A real ARM64 (A1) build. The base images and packages publish ARM64 builds, but the images haven't been built on ARM.
+>
+> The image build step was also skipped in the test, because the test sandbox couldn't reach Debian mirrors directly.
+>
+> Tested zip SHA-256: `f911b1cb0374c857cb414fd32d27c1f105e85d95cdd77fee1399243a46c0965e` (compare with tak.gov).
 
 ## What you get
 
@@ -99,6 +114,8 @@ ssh ubuntu@<public_ip> 'sudo cat /root/tak-secrets.env'    # CERT_PASS is the ce
 ```
 
 Import `admin.p12` into your browser or OS certificate store using `CERT_PASS`, then open `https://<public_ip>:8443`. Expect a certificate warning the first time, because the server uses your own CA.
+
+TAK's scripts make `.p12` files in the older ("legacy") encryption format, for compatibility with ATAK. Browsers and macOS Keychain import them fine. On the command line, OpenSSL 3 needs `-legacy` to open them.
 
 ### 7. Add phones
 
