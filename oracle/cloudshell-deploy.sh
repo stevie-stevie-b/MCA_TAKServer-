@@ -49,7 +49,7 @@ else
 fi
 
 # --- SSH key (kept in Cloud Shell's home folder) -----------------------------
-[ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N "" -f "$KEY" -C tak-server
+[ -f "$KEY" ] || ssh-keygen -q -t rsa -b 4096 -N "" -f "$KEY" -C tak-server  # RSA: Cloud Shell runs in FIPS mode (no ed25519)
 echo "SSH key: $KEY"
 
 # --- Inputs ------------------------------------------------------------------
